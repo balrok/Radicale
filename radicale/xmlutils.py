@@ -316,6 +316,7 @@ def _visit_time_ranges(vobject_item, child_name, range_fn, infinity_fn):
 
     def get_children(components):
         main = None
+        rec_main = None
         recurrences = []
         for comp in components:
             if hasattr(comp, "recurrence_id") and comp.recurrence_id.value:
@@ -323,11 +324,14 @@ def _visit_time_ranges(vobject_item, child_name, range_fn, infinity_fn):
                 if comp.rruleset:
                     # Prevent possible infinite loop
                     raise ValueError("Overwritten recurrence with RRULESET")
+                rec_main = comp
                 yield comp, True, ()
             else:
                 if main is not None:
                     raise ValueError("Multiple main components")
                 main = comp
+        if main is None and len(recurrences) == 1:
+            main = rec_main
         if main is None:
             raise ValueError("Main component missing")
         yield main, False, recurrences
