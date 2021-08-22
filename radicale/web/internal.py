@@ -1,5 +1,5 @@
 # This file is part of Radicale Server - Calendar Server
-# Copyright (C) 2017 Unrud <unrud@outlook.com>
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,19 +14,27 @@
 # You should have received a copy of the GNU General Public License
 # along with Radicale.  If not, see <http://www.gnu.org/licenses/>.
 
+"""
+The default web backend.
+
+Features:
+
+  - Create and delete address books and calendars.
+  - Edit basic metadata of existing address books and calendars.
+  - Upload address books and calendars from files.
+
+"""
+
+
 import os
 import posixpath
 import time
 from http import client
-from importlib import import_module
 
 import pkg_resources
 
-from radicale import storage
-
-NOT_FOUND = (
-    client.NOT_FOUND, (("Content-Type", "text/plain"),),
-    "The requested resource could not be found.")
+from radicale import httputils, pathutils, web
+from radicale.log import logger
 
 MIMETYPES = {
     ".css": "text/css",
@@ -44,64 +52,23 @@ MIMETYPES = {
     ".xml": "text/xml"}
 FALLBACK_MIMETYPE = "application/octet-stream"
 
-INTERNAL_TYPES = ("None", "none", "internal")
 
+class Web(web.BaseWeb):
+    def __init__(self, configuration):
+        super().__init__(configuration)
+        self.folder = pkg_resources.resource_filename(__name__,
+                                                      "internal_data")
 
-def load(configuration, logger):
-    """Load the web module chosen in configuration."""
-    web_type = configuration.get("web", "type")
-    if web_type in ("None", "none"):  # DEPRECATED: use "none"
-        web_class = NoneWeb
-    elif web_type == "internal":
-        web_class = Web
-    else:
+    def get(self, environ, base_prefix, path, user):
+        assert path == "/.web" or path.startswith("/.web/")
+        assert pathutils.sanitize_path(path) == path
         try:
-            web_class = import_module(web_type).Web
-        except Exception as e:
-            raise RuntimeError("Failed to load web module %r: %s" %
-                               (web_type, e)) from e
-    logger.info("Web type is %r", web_type)
-    return web_class(configuration, logger)
-
-
-class BaseWeb:
-    def __init__(self, configuration, logger):
-        self.configuration = configuration
-        self.logger = logger
-
-    def get(self, environ, base_prefix, path, user):
-        """GET request.
-
-        ``base_prefix`` is sanitized and never ends with "/".
-
-        ``path`` is sanitized and always starts with "/.web"
-
-        ``user`` is empty for anonymous users.
-
-        """
-        raise NotImplementedError
-
-
-class NoneWeb(BaseWeb):
-    def get(self, environ, base_prefix, path, user):
-        if path != "/.web":
-            return NOT_FOUND
-        return client.OK, {"Content-Type": "text/plain"}, "Radicale works!"
-
-
-class Web(BaseWeb):
-    def __init__(self, configuration, logger):
-        super().__init__(configuration, logger)
-        self.folder = pkg_resources.resource_filename(__name__, "web")
-
-    def get(self, environ, base_prefix, path, user):
-        try:
-            filesystem_path = storage.path_to_filesystem(
-                self.folder, path[len("/.web"):])
+            filesystem_path = pathutils.path_to_filesystem(
+                self.folder, path[len("/.web"):].strip("/"))
         except ValueError as e:
-            self.logger.debug("Web content with unsafe path %r requested: %s",
-                              path, e, exc_info=True)
-            return NOT_FOUND
+            logger.debug("Web content with unsafe path %r requested: %s",
+                         path, e, exc_info=True)
+            return httputils.NOT_FOUND
         if os.path.isdir(filesystem_path) and not path.endswith("/"):
             location = posixpath.basename(path) + "/"
             return (client.FOUND,
@@ -110,7 +77,7 @@ class Web(BaseWeb):
         if os.path.isdir(filesystem_path):
             filesystem_path = os.path.join(filesystem_path, "index.html")
         if not os.path.isfile(filesystem_path):
-            return NOT_FOUND
+            return httputils.NOT_FOUND
         content_type = MIMETYPES.get(
             os.path.splitext(filesystem_path)[1].lower(), FALLBACK_MIMETYPE)
         with open(filesystem_path, "rb") as f:

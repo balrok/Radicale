@@ -1,6 +1,6 @@
-FROM alpine:latest
+FROM python:3-alpine
 
-# Version of Radicale (e.g. 2.0.0)
+# Version of Radicale (e.g. 3.0.x)
 ARG VERSION=master
 
 # Install dependencies
@@ -32,4 +32,4 @@ VOLUME /etc/radicale
 # TCP port of Radicale (Publish it on a host interface!)
 EXPOSE 5232
 # Run Radicale (Configure it here or provide a "config" file!)
-CMD ["./radicale.py", "--hosts", "0.0.0.0:5232"]
+CMD ["radicale", "--hosts", "0.0.0.0:5232"]

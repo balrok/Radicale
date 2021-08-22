@@ -1,9 +1,6 @@
-#!/usr/bin/env python3
-#
 # This file is part of Radicale Server - Calendar Server
-# Copyright © 2008 Nicolas Kandel
-# Copyright © 2008 Pascal Halter
-# Copyright © 2008-2017 Guillaume Ayoub
+# Copyright © 2012-2017 Guillaume Ayoub
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,12 +16,19 @@
 # along with Radicale.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-Radicale CalDAV Server.
+Custom storage backend.
 
-Launch the server according to configuration and command-line options.
+Copy of multifilesystem storage backend that uses the default ``sync``
+implementation for testing.
 
 """
 
-import radicale.__main__
+from radicale.storage import BaseCollection, multifilesystem
 
-radicale.__main__.run()
+
+class Collection(multifilesystem.Collection):
+    sync = BaseCollection.sync
+
+
+class Storage(multifilesystem.Storage):
+    _collection_class = Collection

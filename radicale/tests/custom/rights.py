@@ -1,5 +1,5 @@
 # This file is part of Radicale Server - Calendar Server
-# Copyright (C) 2017 Unrud <unrud@outlook.com>
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,9 +19,12 @@ Custom rights management.
 
 """
 
-from radicale import rights
+from radicale import pathutils, rights
 
 
 class Rights(rights.BaseRights):
-    def authorized(self, user, path, permission):
-        return path.strip("/") in ("tmp", "other")
+    def authorization(self, user, path):
+        sane_path = pathutils.strip_path(path)
+        if sane_path not in ("tmp", "other"):
+            return ""
+        return "RrWw"

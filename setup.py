@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-#
+
 # This file is part of Radicale Server - Calendar Server
 # Copyright © 2009-2017 Guillaume Ayoub
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,25 +32,26 @@ and Android clients. It is free and open-source software, released under GPL
 version 3.
 
 For further information, please visit the `Radicale Website
-<http://www.radicale.org/>`_.
+<https://radicale.org/>`_.
 
 """
 
 import sys
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 # When the version is updated, a new section in the NEWS.md file must be
 # added too.
-VERSION = "2.1.9"
-WEB_FILES = ["web/css/icon.png", "web/css/main.css", "web/fn.js",
-             "web/index.html"]
-
+VERSION = "master"
+WEB_FILES = ["web/internal_data/css/icon.png",
+             "web/internal_data/css/main.css",
+             "web/internal_data/fn.js",
+             "web/internal_data/index.html"]
 
 needs_pytest = {"pytest", "test", "ptr"}.intersection(sys.argv)
 pytest_runner = ["pytest-runner"] if needs_pytest else []
 tests_require = ["pytest-runner", "pytest", "pytest-cov", "pytest-flake8",
-                 "pytest-isort"]
+                 "pytest-isort", "waitress"]
 
 setup(
     name="Radicale",
@@ -58,23 +60,23 @@ setup(
     long_description=__doc__,
     author="Guillaume Ayoub",
     author_email="guillaume.ayoub@kozea.fr",
-    url="http://www.radicale.org/",
-    download_url=("http://pypi.python.org/packages/source/R/Radicale/"
+    url="https://radicale.org/",
+    download_url=("https://pypi.python.org/packages/source/R/Radicale/"
                   "Radicale-%s.tar.gz" % VERSION),
     license="GNU GPL v3",
     platforms="Any",
-    packages=["radicale"],
+    packages=find_packages(
+        exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     package_data={"radicale": WEB_FILES},
     entry_points={"console_scripts": ["radicale = radicale.__main__:run"]},
-    install_requires=["vobject==0.9.5", "python-dateutil==2.6.1"],
+    install_requires=["defusedxml", "passlib", "vobject>=0.9.6",
+                      "python-dateutil>=2.7.3"],
     setup_requires=pytest_runner,
     tests_require=tests_require,
-    extras_require={
-        "test": tests_require,
-        "md5": "passlib",
-        "bcrypt": "passlib[bcrypt]"},
+    extras_require={"test": tests_require,
+                    "bcrypt": ["passlib[bcrypt]", "bcrypt"]},
     keywords=["calendar", "addressbook", "CalDAV", "CardDAV"],
-    python_requires=">=3.3",
+    python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Console",
@@ -84,8 +86,10 @@ setup(
         "License :: OSI Approved :: GNU General Public License (GPL)",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.3",
-        "Programming Language :: Python :: 3.4",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: Implementation :: CPython",
+        "Programming Language :: Python :: Implementation :: PyPy",
         "Topic :: Office/Business :: Groupware"])

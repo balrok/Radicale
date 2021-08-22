@@ -1,5 +1,6 @@
 # This file is part of Radicale Server - Calendar Server
 # Copyright © 2012-2017 Guillaume Ayoub
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,17 +16,25 @@
 # along with Radicale.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-Custom storage backend.
-
-Copy of filesystem storage backend for testing
+Rights backend that allows authenticated users to read and write all
+calendars and address books.
 
 """
 
-from radicale import storage
+from radicale import pathutils, rights
 
 
-# TODO: make something more in this collection (and test it)
-class Collection(storage.Collection):
-    """Collection stored in a folder."""
+class Rights(rights.BaseRights):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._verify_user = self.configuration.get("auth", "type") != "none"
+
+    def authorization(self, user, path):
+        if self._verify_user and not user:
+            return ""
+        sane_path = pathutils.strip_path(path)
+        if "/" not in sane_path:
+            return "RW"
+        if sane_path.count("/") == 1:
+            return "rw"
+        return ""

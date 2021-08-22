@@ -2,6 +2,7 @@
 # Copyright © 2008 Nicolas Kandel
 # Copyright © 2008 Pascal Halter
 # Copyright © 2008-2017 Guillaume Ayoub
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,5 +28,7 @@ from radicale import auth
 
 
 class Auth(auth.BaseAuth):
-    def is_authenticated(self, user, password):
-        return user == "tmp"
+    def login(self, login, password):
+        if login == "tmp":
+            return login
+        return ""

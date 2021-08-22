@@ -1,7 +1,8 @@
-#!/usr/bin/env python3
-#
 # This file is part of Radicale Server - Calendar Server
-# Copyright © 2011-2017 Guillaume Ayoub
+# Copyright © 2008 Nicolas Kandel
+# Copyright © 2008 Pascal Halter
+# Copyright © 2008-2017 Guillaume Ayoub
+# Copyright © 2017-2018 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,17 +18,16 @@
 # along with Radicale.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-Radicale FastCGI Example.
+Authentication backend that takes the username from the ``REMOTE_USER``
+WSGI environment variable.
 
-Launch a Radicale FastCGI server according to configuration.
-
-This script relies on flup but can be easily adapted to use another
-WSGI-to-FastCGI mapper.
+It's intended for use with an external WSGI server.
 
 """
 
-from flup.server.fcgi import WSGIServer
-from radicale import application
+import radicale.auth.none as none
 
 
-WSGIServer(application).run()
+class Auth(none.Auth):
+    def get_external_login(self, environ):
+        return environ.get("REMOTE_USER", ""), ""

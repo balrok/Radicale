@@ -1,6 +1,6 @@
 /**
  * This file is part of Radicale Server - Calendar Server
- * Copyright (C) 2017 Unrud <unrud@outlook.com>
+ * Copyright © 2017-2018 Unrud <unrud@outlook.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,28 +21,21 @@
  * @const
  * @type {string}
  */
-var SERVER = (location.protocol + '//' + location.hostname +
-              (location.port ? ':' + location.port : ''));
+const SERVER = (location.protocol + '//' + location.hostname +
+                (location.port ? ':' + location.port : ''));
 
 /**
  * Path of the root collection on the server (must end with /)
  * @const
  * @type {string}
  */
-var ROOT_PATH = location.pathname.replace(new RegExp("/+[^/]+/*(/index\\.html?)?$"), "") + '/';
-
-/**
- * time between updates of collections (milliseconds)
- * @const
-  * @type {?int}
- */
-var UPDATE_INTERVAL = null;
+const ROOT_PATH = location.pathname.replace(new RegExp("/+[^/]+/*(/index\\.html?)?$"), "") + '/';
 
 /**
  * Regex to match and normalize color
  * @const
  */
-var COLOR_RE = new RegExp("^(#[0-9A-Fa-f]{6})(?:[0-9A-Fa-f]{2})?$");
+const COLOR_RE = new RegExp("^(#[0-9A-Fa-f]{6})(?:[0-9A-Fa-f]{2})?$");
 
 /**
  * Escape string for usage in XML
@@ -51,17 +44,17 @@ var COLOR_RE = new RegExp("^(#[0-9A-Fa-f]{6})(?:[0-9A-Fa-f]{2})?$");
  */
 function escape_xml(s) {
     return (s
-            .replace("&", "&amp;")
-            .replace('"', "&quot;")
-            .replace("'", "&apos;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;"));
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&apos;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;"));
 }
 
 /**
  * @enum {string}
  */
-var CollectionType = {
+const CollectionType = {
     PRINCIPAL: "PRINCIPAL",
     ADDRESSBOOK: "ADDRESSBOOK",
     CALENDAR_JOURNAL_TASKS: "CALENDAR_JOURNAL_TASKS",
@@ -72,9 +65,8 @@ var CollectionType = {
     JOURNAL: "JOURNAL",
     TASKS: "TASKS",
     is_subset: function(a, b) {
-        var components = a.split("_");
-        var i;
-        for (i = 0; i < components.length; i++) {
+        let components = a.split("_");
+        for (let i = 0; i < components.length; i++) {
             if (b.search(components[i]) === -1) {
                 return false;
             }
@@ -88,17 +80,17 @@ var CollectionType = {
             }
             return this.ADDRESSBOOK;
         }
-        var union = "";
+        let union = [];
         if (a.search(this.CALENDAR) !== -1 || b.search(this.CALENDAR) !== -1) {
-            union += (union ? "_" : "") + this.CALENDAR;
+            union.push(this.CALENDAR);
         }
         if (a.search(this.JOURNAL) !== -1 || b.search(this.JOURNAL) !== -1) {
-            union += (union ? "_" : "") + this.JOURNAL;
+            union.push(this.JOURNAL);
         }
         if (a.search(this.TASKS) !== -1 || b.search(this.TASKS) !== -1) {
-            union += (union ? "_" : "") + this.TASKS;
+            union.push(this.TASKS);
         }
-        return union;
+        return union.join("_");
     }
 };
 
@@ -127,16 +119,16 @@ function Collection(href, type, displayname, description, color) {
  * @return {XMLHttpRequest}
  */
 function get_principal(user, password, callback) {
-    var request = new XMLHttpRequest();
+    let request = new XMLHttpRequest();
     request.open("PROPFIND", SERVER + ROOT_PATH, true, user, password);
     request.onreadystatechange = function() {
         if (request.readyState !== 4) {
             return;
         }
         if (request.status === 207) {
-            var xml = request.responseXML;
-            var principal_element = xml.querySelector("*|multistatus:root > *|response:first-of-type > *|propstat > *|prop > *|current-user-principal > *|href");
-            var displayname_element = xml.querySelector("*|multistatus:root > *|response:first-of-type > *|propstat > *|prop > *|displayname");
+            let xml = request.responseXML;
+            let principal_element = xml.querySelector("*|multistatus:root > *|response:first-of-type > *|propstat > *|prop > *|current-user-principal > *|href");
+            let displayname_element = xml.querySelector("*|multistatus:root > *|response:first-of-type > *|propstat > *|prop > *|displayname");
             if (principal_element) {
                 callback(new Collection(
                     principal_element.textContent,
@@ -170,7 +162,7 @@ function get_principal(user, password, callback) {
  * @return {XMLHttpRequest}
  */
 function get_collections(user, password, collection, callback) {
-    var request = new XMLHttpRequest();
+    let request = new XMLHttpRequest();
     request.open("PROPFIND", SERVER + collection.href, true, user, password);
     request.setRequestHeader("depth", "1");
     request.onreadystatechange = function() {
@@ -178,28 +170,27 @@ function get_collections(user, password, collection, callback) {
             return;
         }
         if (request.status === 207) {
-            var xml = request.responseXML;
-            var collections = [];
-            var response_query = "*|multistatus:root > *|response";
-            var responses = xml.querySelectorAll(response_query);
-            var i;
-            for (i = 0; i < responses.length; i++) {
-                var response = responses[i];
-                var href_element = response.querySelector(response_query + " > *|href");
-                var resourcetype_query = response_query + " > *|propstat > *|prop > *|resourcetype";
-                var resourcetype_element = response.querySelector(resourcetype_query);
-                var displayname_element = response.querySelector(response_query + " > *|propstat > *|prop > *|displayname");
-                var calendarcolor_element = response.querySelector(response_query + " > *|propstat > *|prop > *|calendar-color");
-                var addressbookcolor_element = response.querySelector(response_query + " > *|propstat > *|prop > *|addressbook-color");
-                var calendardesc_element = response.querySelector(response_query + " > *|propstat > *|prop > *|calendar-description");
-                var addressbookdesc_element = response.querySelector(response_query + " > *|propstat > *|prop > *|addressbook-description");
-                var components_query = response_query + " > *|propstat > *|prop > *|supported-calendar-component-set";
-                var components_element = response.querySelector(components_query);
-                var href = href_element ? href_element.textContent : "";
-                var displayname = displayname_element ? displayname_element.textContent : "";
-                var type = "";
-                var color = "";
-                var description = "";
+            let xml = request.responseXML;
+            let collections = [];
+            let response_query = "*|multistatus:root > *|response";
+            let responses = xml.querySelectorAll(response_query);
+            for (let i = 0; i < responses.length; i++) {
+                let response = responses[i];
+                let href_element = response.querySelector(response_query + " > *|href");
+                let resourcetype_query = response_query + " > *|propstat > *|prop > *|resourcetype";
+                let resourcetype_element = response.querySelector(resourcetype_query);
+                let displayname_element = response.querySelector(response_query + " > *|propstat > *|prop > *|displayname");
+                let calendarcolor_element = response.querySelector(response_query + " > *|propstat > *|prop > *|calendar-color");
+                let addressbookcolor_element = response.querySelector(response_query + " > *|propstat > *|prop > *|addressbook-color");
+                let calendardesc_element = response.querySelector(response_query + " > *|propstat > *|prop > *|calendar-description");
+                let addressbookdesc_element = response.querySelector(response_query + " > *|propstat > *|prop > *|addressbook-description");
+                let components_query = response_query + " > *|propstat > *|prop > *|supported-calendar-component-set";
+                let components_element = response.querySelector(components_query);
+                let href = href_element ? href_element.textContent : "";
+                let displayname = displayname_element ? displayname_element.textContent : "";
+                let type = "";
+                let color = "";
+                let description = "";
                 if (resourcetype_element) {
                     if (resourcetype_element.querySelector(resourcetype_query + " > *|addressbook")) {
                         type = CollectionType.ADDRESSBOOK;
@@ -221,9 +212,9 @@ function get_collections(user, password, collection, callback) {
                         description = calendardesc_element ? calendardesc_element.textContent : "";
                     }
                 }
-                var sane_color = color.trim();
+                let sane_color = color.trim();
                 if (sane_color) {
-                    var color_match = COLOR_RE.exec(sane_color);
+                    let color_match = COLOR_RE.exec(sane_color);
                     if (color_match) {
                         sane_color = color_match[1];
                     } else {
@@ -235,8 +226,8 @@ function get_collections(user, password, collection, callback) {
                 }
             }
             collections.sort(function(a, b) {
-                /** @type {string} */ var ca = a.displayname || a.href;
-                /** @type {string} */ var cb = b.displayname || b.href;
+                /** @type {string} */ let ca = a.displayname || a.href;
+                /** @type {string} */ let cb = b.displayname || b.href;
                 return ca.localeCompare(cb);
             });
             callback(collections, null);
@@ -266,12 +257,38 @@ function get_collections(user, password, collection, callback) {
 /**
  * @param {string} user
  * @param {string} password
+ * @param {string} collection_href Must always start and end with /.
+ * @param {File} file
+ * @param {function(?string)} callback Returns error or null
+ * @return {XMLHttpRequest}
+ */
+function upload_collection(user, password, collection_href, file, callback) {
+    let request = new XMLHttpRequest();
+    request.open("PUT", SERVER + collection_href, true, user, password);
+    request.onreadystatechange = function() {
+        if (request.readyState !== 4) {
+            return;
+        }
+        if (200 <= request.status && request.status < 300) {
+            callback(null);
+        } else {
+            callback(request.status + " " + request.statusText);
+        }
+    };
+    request.setRequestHeader("If-None-Match", "*");
+    request.send(file);
+    return request;
+}
+
+/**
+ * @param {string} user
+ * @param {string} password
  * @param {Collection} collection
  * @param {function(?string)} callback Returns error or null
  * @return {XMLHttpRequest}
  */
 function delete_collection(user, password, collection, callback) {
-    var request = new XMLHttpRequest();
+    let request = new XMLHttpRequest();
     request.open("DELETE", SERVER + collection.href, true, user, password);
     request.onreadystatechange = function() {
         if (request.readyState !== 4) {
@@ -296,7 +313,7 @@ function delete_collection(user, password, collection, callback) {
  * @return {XMLHttpRequest}
  */
 function create_edit_collection(user, password, collection, create, callback) {
-    var request = new XMLHttpRequest();
+    let request = new XMLHttpRequest();
     request.open(create ? "MKCOL" : "PROPPATCH", SERVER + collection.href, true, user, password);
     request.onreadystatechange = function() {
         if (request.readyState !== 4) {
@@ -308,13 +325,13 @@ function create_edit_collection(user, password, collection, create, callback) {
             callback(request.status + " " + request.statusText);
         }
     };
-    var displayname = escape_xml(collection.displayname);
-    var calendar_color = "";
-    var addressbook_color = "";
-    var calendar_description = "";
-    var addressbook_description = "";
-    var resourcetype;
-    var components = "";
+    let displayname = escape_xml(collection.displayname);
+    let calendar_color = "";
+    let addressbook_color = "";
+    let calendar_description = "";
+    let addressbook_description = "";
+    let resourcetype;
+    let components = "";
     if (collection.type === CollectionType.ADDRESSBOOK) {
         addressbook_color = escape_xml(collection.color + (collection.color ? "ff" : ""));
         addressbook_description = escape_xml(collection.description);
@@ -333,7 +350,7 @@ function create_edit_collection(user, password, collection, create, callback) {
             components += '<C:comp name="VTODO" />';
         }
     }
-    var xml_request = create ? "mkcol" : "propertyupdate";
+    let xml_request = create ? "mkcol" : "propertyupdate";
     request.send('<?xml version="1.0" encoding="UTF-8" ?>' +
                  '<' + xml_request + ' xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:I="http://apple.com/ns/ical/" xmlns:INF="http://inf-it.com/ns/ab/">' +
                      '<set>' +
@@ -384,6 +401,13 @@ function edit_collection(user, password, collection, callback) {
 }
 
 /**
+ * @return {string}
+*/
+function random_uuid() {
+    return random_hex(8) + "-" + random_hex(4) + "-" + random_hex(4) + "-" + random_hex(4) + "-" + random_hex(12);
+}
+
+/**
  * @interface
  */
 function Scene() {}
@@ -404,7 +428,7 @@ Scene.prototype.release = function() {};
 /**
  * @type {Array<Scene>}
  */
-var scene_stack = [];
+let scene_stack = [];
 
 /**
  * Push scene onto stack.
@@ -432,14 +456,14 @@ function pop_scene(index) {
     }
     scene_stack[scene_stack.length - 1].hide();
     while (scene_stack.length - 1 > index) {
-        var old_length = scene_stack.length;
+        let old_length = scene_stack.length;
         scene_stack.pop().release();
         if (old_length - 1 === index + 1) {
             break;
         }
     }
     if (scene_stack.length >= 1) {
-        var scene = scene_stack[scene_stack.length - 1];
+        let scene = scene_stack[scene_stack.length - 1];
         scene.show();
     } else {
         throw "Scene stack is empty";
@@ -451,20 +475,19 @@ function pop_scene(index) {
  * @implements {Scene}
  */
 function LoginScene() {
-    var html_scene = document.getElementById("loginscene");
-    var form = html_scene.querySelector("[name=form]");
-    var user_form = html_scene.querySelector("[name=user]");
-    var password_form = html_scene.querySelector("[name=password]");
-    var error_form = html_scene.querySelector("[name=error]");
-    var logout_view = document.getElementById("logoutview");
-    var logout_user_form = logout_view.querySelector("[name=user]");
-    var logout_btn = logout_view.querySelector("[name=link]");
-    var first_show = true;
+    let html_scene = document.getElementById("loginscene");
+    let form = html_scene.querySelector("[data-name=form]");
+    let user_form = html_scene.querySelector("[data-name=user]");
+    let password_form = html_scene.querySelector("[data-name=password]");
+    let error_form = html_scene.querySelector("[data-name=error]");
+    let logout_view = document.getElementById("logoutview");
+    let logout_user_form = logout_view.querySelector("[data-name=user]");
+    let logout_btn = logout_view.querySelector("[data-name=link]");
 
-    /** @type {?number} */ var scene_index = null;
-    var user = "";
-    var error = "";
-    /** @type {?XMLHttpRequest} */ var principal_req = null;
+    /** @type {?number} */ let scene_index = null;
+    let user = "";
+    let error = "";
+    /** @type {?XMLHttpRequest} */ let principal_req = null;
 
     function read_form() {
         user = user_form.value;
@@ -479,15 +502,15 @@ function LoginScene() {
     function onlogin() {
         try {
             read_form();
-            var password = password_form.value;
+            let password = password_form.value;
             if (user) {
                 error = "";
                 // setup logout
-                logout_view.style.display = "block";
+                logout_view.classList.remove("hidden");
                 logout_btn.onclick = onlogout;
                 logout_user_form.textContent = user;
                 // Fetch principal
-                var loading_scene = new LoadingScene();
+                let loading_scene = new LoadingScene();
                 push_scene(loading_scene, false);
                 principal_req = get_principal(user, password, function(collection, error1) {
                     if (scene_index === null) {
@@ -499,13 +522,9 @@ function LoginScene() {
                         pop_scene(scene_index);
                     } else {
                         // show collections
-                        var saved_user = user;
+                        let saved_user = user;
                         user = "";
-                        if (typeof(sessionStorage) !== "undefined") {
-                            sessionStorage.setItem("radicale_user", saved_user);
-                            sessionStorage.setItem("radicale_password", password);
-                        }
-                        var collections_scene = new CollectionsScene(
+                        let collections_scene = new CollectionsScene(
                             saved_user, password, collection, function(error1) {
                                 error = error1;
                                 user = saved_user;
@@ -536,29 +555,23 @@ function LoginScene() {
         return false;
     }
 
+    function remove_logout() {
+        logout_view.classList.add("hidden");
+        logout_btn.onclick = null;
+        logout_user_form.textContent = "";
+    }
+
     this.show = function() {
-        var saved_first_show = first_show;
-        first_show = false;
-        this.release();
+        remove_logout();
         fill_form();
         form.onsubmit = onlogin;
-        html_scene.style.display = "block";
-        user_form.focus();
+        html_scene.classList.remove("hidden");
         scene_index = scene_stack.length - 1;
-        if (typeof(sessionStorage) !== "undefined") {
-            if (saved_first_show && sessionStorage.getItem("radicale_user")) {
-                user_form.value = sessionStorage.getItem("radicale_user");
-                password_form.value = sessionStorage.getItem("radicale_password");
-                onlogin();
-            } else {
-                sessionStorage.setItem("radicale_user", "");
-                sessionStorage.setItem("radicale_password", "");
-            }
-        }
+        user_form.focus();
     };
     this.hide = function() {
         read_form();
-        html_scene.style.display = "none";
+        html_scene.classList.add("hidden");
         form.onsubmit = null;
     };
     this.release = function() {
@@ -568,10 +581,7 @@ function LoginScene() {
             principal_req.abort();
             principal_req = null;
         }
-        // remove logout
-        logout_view.style.display = "none";
-        logout_btn.onclick = null;
-        logout_user_form.textContent = "";
+        remove_logout();
     };
 }
 
@@ -580,12 +590,12 @@ function LoginScene() {
  * @implements {Scene}
  */
 function LoadingScene() {
-    var html_scene = document.getElementById("loadingscene");
+    let html_scene = document.getElementById("loadingscene");
     this.show = function() {
-        html_scene.style.display = "block";
+        html_scene.classList.remove("hidden");
     };
     this.hide = function() {
-        html_scene.style.display = "none";
+        html_scene.classList.add("hidden");
     };
     this.release = function() {};
 }
@@ -600,22 +610,44 @@ function LoadingScene() {
  *                                   scene is popped.
  */
 function CollectionsScene(user, password, collection, onerror) {
-    var html_scene = document.getElementById("collectionsscene");
-    var template = html_scene.querySelector("[name=collectiontemplate]");
-    var new_btn = html_scene.querySelector("[name=new]");
+    let html_scene = document.getElementById("collectionsscene");
+    let template = html_scene.querySelector("[data-name=collectiontemplate]");
+    let new_btn = html_scene.querySelector("[data-name=new]");
+    let upload_btn = html_scene.querySelector("[data-name=upload]");
 
-    /** @type {?number} */ var scene_index = null;
-    var saved_template_display = null;
-    /** @type {?XMLHttpRequest} */ var collections_req = null;
-    var timer = null;
-    var from_update = false;
-    /** @type {?Array<Collection>} */ var collections = null;
-    /** @type {Array<Node>} */ var nodes = [];
+    /** @type {?number} */ let scene_index = null;
+    /** @type {?XMLHttpRequest} */ let collections_req = null;
+    /** @type {?Array<Collection>} */ let collections = null;
+    /** @type {Array<Node>} */ let nodes = [];
+    let filesInput = document.createElement("input");
+    filesInput.setAttribute("type", "file");
+    filesInput.setAttribute("accept", ".ics, .vcf");
+    filesInput.setAttribute("multiple", "");
+    let filesInputForm = document.createElement("form");
+    filesInputForm.appendChild(filesInput);
 
     function onnew() {
         try {
-            var create_collection_scene = new CreateEditCollectionScene(user, password, collection);
+            let create_collection_scene = new CreateEditCollectionScene(user, password, collection);
             push_scene(create_collection_scene, false);
+        } catch(err) {
+            console.error(err);
+        }
+        return false;
+    }
+
+    function onupload() {
+        filesInput.click();
+        return false;
+    }
+
+    function onfileschange() {
+        try {
+            let files = filesInput.files;
+            if (files.length > 0) {
+                let upload_scene = new UploadCollectionScene(user, password, collection, files);
+                push_scene(upload_scene);
+            }
         } catch(err) {
             console.error(err);
         }
@@ -624,7 +656,7 @@ function CollectionsScene(user, password, collection, onerror) {
 
     function onedit(collection) {
         try {
-            var edit_collection_scene = new CreateEditCollectionScene(user, password, collection);
+            let edit_collection_scene = new CreateEditCollectionScene(user, password, collection);
             push_scene(edit_collection_scene, false);
         } catch(err) {
             console.error(err);
@@ -634,7 +666,7 @@ function CollectionsScene(user, password, collection, onerror) {
 
     function ondelete(collection) {
         try {
-            var delete_collection_scene = new DeleteCollectionScene(user, password, collection);
+            let delete_collection_scene = new DeleteCollectionScene(user, password, collection);
             push_scene(delete_collection_scene, false);
         } catch(err) {
             console.error(err);
@@ -643,24 +675,21 @@ function CollectionsScene(user, password, collection, onerror) {
     }
 
     function show_collections(collections) {
-        nodes.forEach(function(node) {
-            template.parentNode.removeChild(node);
-        });
-        nodes = [];
         collections.forEach(function (collection) {
-            var node = template.cloneNode(true);
-            var title_form = node.querySelector("[name=title]");
-            var description_form = node.querySelector("[name=description]");
-            var url_form = node.querySelector("[name=url]");
-            var color_form = node.querySelector("[name=color]");
-            var delete_btn = node.querySelector("[name=delete]");
-            var edit_btn = node.querySelector("[name=edit]");
+            let node = template.cloneNode(true);
+            node.classList.remove("hidden");
+            let title_form = node.querySelector("[data-name=title]");
+            let description_form = node.querySelector("[data-name=description]");
+            let url_form = node.querySelector("[data-name=url]");
+            let color_form = node.querySelector("[data-name=color]");
+            let delete_btn = node.querySelector("[data-name=delete]");
+            let edit_btn = node.querySelector("[data-name=edit]");
             if (collection.color) {
                 color_form.style.color = collection.color;
             } else {
-                color_form.style.display = "none";
+                color_form.classList.add("hidden");
             }
-            var possible_types = [CollectionType.ADDRESSBOOK];
+            let possible_types = [CollectionType.ADDRESSBOOK];
             [CollectionType.CALENDAR, ""].forEach(function(e) {
                 [CollectionType.union(e, CollectionType.JOURNAL), e].forEach(function(e) {
                     [CollectionType.union(e, CollectionType.TASKS), e].forEach(function(e) {
@@ -672,27 +701,25 @@ function CollectionsScene(user, password, collection, onerror) {
             });
             possible_types.forEach(function(e) {
                 if (e !== collection.type) {
-                    node.querySelector("[name=" + e + "]").style.display = "none";
+                    node.querySelector("[data-name=" + e + "]").classList.add("hidden");
                 }
             });
             title_form.textContent = collection.displayname || collection.href;
             description_form.textContent = collection.description;
-            var href = SERVER + collection.href;
+            let href = SERVER + collection.href;
             url_form.href = href;
             url_form.textContent = href;
-            delete_btn.onclick = function(ev) {return ondelete(collection);};
-            edit_btn.onclick = function(ev) {return onedit(collection);};
-            node.style.display = saved_template_display;
+            delete_btn.onclick = function() {return ondelete(collection);};
+            edit_btn.onclick = function() {return onedit(collection);};
+            node.classList.remove("hidden");
             nodes.push(node);
             template.parentNode.insertBefore(node, template);
         });
     }
 
     function update() {
-        if (collections === null) {
-            var loading_scene = new LoadingScene();
-            push_scene(loading_scene, false);
-        }
+        let loading_scene = new LoadingScene();
+        push_scene(loading_scene, false);
         collections_req = get_collections(user, password, collection, function(collections1, error) {
             if (scene_index === null) {
                 return;
@@ -702,64 +729,165 @@ function CollectionsScene(user, password, collection, onerror) {
                 onerror(error);
                 pop_scene(scene_index - 1);
             } else {
-                var old_collections = collections;
                 collections = collections1;
-                if (UPDATE_INTERVAL !== null) {
-                    timer = window.setTimeout(update, UPDATE_INTERVAL);
-                }
-                from_update = true;
-                if (old_collections === null) {
-                    pop_scene(scene_index);
-                } else {
-                    show_collections(collections);
-                }
+                pop_scene(scene_index);
             }
         });
     }
 
     this.show = function() {
-        saved_template_display = template.style.display;
-        template.style.display = "none";
-        html_scene.style.display = "block";
+        html_scene.classList.remove("hidden");
         new_btn.onclick = onnew;
-        if (scene_index === null) {
-            scene_index = scene_stack.length - 1;
-            if (collections === null && collections_req !== null) {
-                pop_scene(scene_index - 1);
-                return;
-            }
+        upload_btn.onclick = onupload;
+        filesInputForm.reset();
+        filesInput.onchange = onfileschange;
+        if (collections === null) {
             update();
-        } else if (collections === null) {
-            pop_scene(scene_index - 1);
         } else {
-            if (from_update) {
-                show_collections(collections);
-            } else {
-                collections = null;
-                update();
-            }
+            // from update loading scene
+            show_collections(collections);
         }
     };
     this.hide = function() {
-        html_scene.style.display = "none";
-        template.style.display = saved_template_display;
+        html_scene.classList.add("hidden");
+        scene_index = scene_stack.length - 1;
         new_btn.onclick = null;
-        if (timer !== null) {
-            window.clearTimeout(timer);
-            timer = null;
-        }
-        from_update = false;
-        if (collections !== null && collections_req !== null) {
-            collections_req.abort();
-            collections_req = null;
-        }
-        show_collections([]);
+        upload_btn.onclick = null;
+        filesInput.onchange = null;
+        collections = null;
+        // remove collection
+        nodes.forEach(function(node) {
+            node.parentNode.removeChild(node);
+        });
+        nodes = [];
     };
     this.release = function() {
         scene_index = null;
         if (collections_req !== null) {
             collections_req.abort();
             collections_req = null;
+        }
+        collections = null;
+        filesInputForm.reset();
+    };
+}
+
+/**
+ * @constructor
+ * @implements {Scene}
+ * @param {string} user
+ * @param {string} password
+ * @param {Collection} collection parent collection
+ * @param {Array<File>} files
+ */
+function UploadCollectionScene(user, password, collection, files) {
+    let html_scene = document.getElementById("uploadcollectionscene");
+    let template = html_scene.querySelector("[data-name=filetemplate]");
+    let close_btn = html_scene.querySelector("[data-name=close]");
+
+    /** @type {?number} */ let scene_index = null;
+    /** @type {?XMLHttpRequest} */ let upload_req = null;
+    /** @type {Array<string>} */ let errors = [];
+    /** @type {?Array<Node>} */ let nodes = null;
+
+    function upload_next() {
+        try {
+            if (files.length === errors.length) {
+                if (errors.every(error => error === null)) {
+                    pop_scene(scene_index - 1);
+                } else {
+                    close_btn.classList.remove("hidden");
+                }
+            } else {
+                let file = files[errors.length];
+                let upload_href = collection.href + random_uuid() + "/";
+                upload_req = upload_collection(user, password, upload_href, file, function(error) {
+                    if (scene_index === null) {
+                        return;
+                    }
+                    upload_req = null;
+                    errors.push(error);
+                    updateFileStatus(errors.length - 1);
+                    upload_next();
+                });
+            }
+        } catch(err) {
+            console.error(err);
+        }
+        return false;
+    }
+
+    function onclose() {
+        try {
+            pop_scene(scene_index - 1);
+        } catch(err) {
+            console.error(err);
+        }
+        return false;
+    }
+
+    function updateFileStatus(i) {
+        if (nodes === null) {
+            return;
+        }
+        let pending_form = nodes[i].querySelector("[data-name=pending]");
+        let success_form = nodes[i].querySelector("[data-name=success]");
+        let error_form = nodes[i].querySelector("[data-name=error]");
+        if (errors.length > i) {
+            pending_form.classList.add("hidden");
+            if (errors[i]) {
+                success_form.classList.add("hidden");
+                error_form.textContent = "Error: " + errors[i];
+                error_form.classList.remove("hidden");
+            } else {
+              success_form.classList.remove("hidden");
+              error_form.classList.add("hidden");
+            }
+        } else {
+            pending_form.classList.remove("hidden");
+            success_form.classList.add("hidden");
+            error_form.classList.add("hidden");
+        }
+    }
+
+    this.show = function() {
+        html_scene.classList.remove("hidden");
+        if (errors.length < files.length) {
+            close_btn.classList.add("hidden");
+        }
+        close_btn.onclick = onclose;
+        nodes = [];
+        for (let i = 0; i < files.length; i++) {
+            let file = files[i];
+            let node = template.cloneNode(true);
+            node.classList.remove("hidden");
+            let name_form = node.querySelector("[data-name=name]");
+            name_form.textContent = file.name;
+            node.classList.remove("hidden");
+            nodes.push(node);
+            updateFileStatus(i);
+            template.parentNode.insertBefore(node, template);
+        }
+        if (scene_index === null) {
+            scene_index = scene_stack.length - 1;
+            upload_next();
+        }
+    };
+
+    this.hide = function() {
+        html_scene.classList.add("hidden");
+        close_btn.classList.remove("hidden");
+        close_btn.onclick = null;
+        nodes.forEach(function(node) {
+            node.parentNode.removeChild(node);
+        });
+        nodes = null;
+    };
+    this.release = function() {
+        scene_index = null;
+        if (upload_req !== null) {
+            upload_req.abort();
+            upload_req = null;
         }
     };
 }
@@ -772,20 +900,19 @@ function CollectionsScene(user, password, collection, onerror) {
  * @param {Collection} collection
  */
 function DeleteCollectionScene(user, password, collection) {
-    var html_scene = document.getElementById("deletecollectionscene");
-    var title_form = html_scene.querySelector("[name=title]");
-    var error_form = html_scene.querySelector("[name=error]");
-    var delete_btn = html_scene.querySelector("[name=delete]");
-    var cancel_btn = html_scene.querySelector("[name=cancel]");
-    var no_btn = html_scene.querySelector("[name=no]");
+    let html_scene = document.getElementById("deletecollectionscene");
+    let title_form = html_scene.querySelector("[data-name=title]");
+    let error_form = html_scene.querySelector("[data-name=error]");
+    let delete_btn = html_scene.querySelector("[data-name=delete]");
+    let cancel_btn = html_scene.querySelector("[data-name=cancel]");
 
-    /** @type {?number} */ var scene_index = null;
-    /** @type {?XMLHttpRequest} */ var delete_req = null;
-    var error = "";
+    /** @type {?number} */ let scene_index = null;
+    /** @type {?XMLHttpRequest} */ let delete_req = null;
+    let error = "";
 
     function ondelete() {
         try {
-            var loading_scene = new LoadingScene();
+            let loading_scene = new LoadingScene();
             push_scene(loading_scene);
             delete_req = delete_collection(user, password, collection, function(error1) {
                 if (scene_index === null) {
@@ -817,14 +944,14 @@ function DeleteCollectionScene(user, password, collection) {
     this.show = function() {
         this.release();
         scene_index = scene_stack.length - 1;
-        html_scene.style.display = "block";
+        html_scene.classList.remove("hidden");
         title_form.textContent = collection.displayname || collection.href;
         error_form.textContent = error ? "Error: " + error : "";
         delete_btn.onclick = ondelete;
         cancel_btn.onclick = oncancel;
     };
     this.hide = function() {
-        html_scene.style.display = "none";
+        html_scene.classList.add("hidden");
         cancel_btn.onclick = null;
         delete_btn.onclick = null;
     };
@@ -842,12 +969,10 @@ function DeleteCollectionScene(user, password, collection) {
  * @param {number} length
  * @return {string}
  */
-function randHex(length) {
-    var s = Math.floor(Math.random() * Math.pow(16, length)).toString(16);
-    while (s.length < length) {
-        s = "0" + s;
-    }
-    return s;
+function random_hex(length) {
+    let bytes = new Uint8Array(Math.ceil(length / 2));
+    window.crypto.getRandomValues(bytes);
+    return bytes.reduce((s, b) => s + b.toString(16).padStart(2, "0"), "").substring(0, length);
 }
 
 /**
@@ -860,38 +985,35 @@ function randHex(length) {
  *                                Otherwise the collection will be edited.
  */
 function CreateEditCollectionScene(user, password, collection) {
-    var edit = collection.type !== CollectionType.PRINCIPAL;
-    var html_scene = document.getElementById(edit ? "editcollectionscene" : "createcollectionscene");
-    var title_form = edit ? html_scene.querySelector("[name=title]") : null;
-    var error_form = html_scene.querySelector("[name=error]");
-    var displayname_form = html_scene.querySelector("[name=displayname]");
-    var description_form = html_scene.querySelector("[name=description]");
-    var type_form = html_scene.querySelector("[name=type]");
-    var color_form = html_scene.querySelector("[name=color]");
-    var submit_btn = html_scene.querySelector("[name=submit]");
-    var cancel_btn = html_scene.querySelector("[name=cancel]");
+    let edit = collection.type !== CollectionType.PRINCIPAL;
+    let html_scene = document.getElementById(edit ? "editcollectionscene" : "createcollectionscene");
+    let title_form = edit ? html_scene.querySelector("[data-name=title]") : null;
+    let error_form = html_scene.querySelector("[data-name=error]");
+    let displayname_form = html_scene.querySelector("[data-name=displayname]");
+    let description_form = html_scene.querySelector("[data-name=description]");
+    let type_form = html_scene.querySelector("[data-name=type]");
+    let color_form = html_scene.querySelector("[data-name=color]");
+    let submit_btn = html_scene.querySelector("[data-name=submit]");
+    let cancel_btn = html_scene.querySelector("[data-name=cancel]");
 
-    /** @type {?number} */ var scene_index = null;
-    /** @type {?XMLHttpRequest} */ var create_edit_req = null;
-    var error = "";
-    /** @type {?Element} */ var saved_type_form = null;
+    /** @type {?number} */ let scene_index = null;
+    /** @type {?XMLHttpRequest} */ let create_edit_req = null;
+    let error = "";
+    /** @type {?Element} */ let saved_type_form = null;
 
-    var href = edit ? collection.href : (
-        collection.href + randHex(8) + "-" + randHex(4) + "-" + randHex(4) +
-        "-" + randHex(4) + "-" + randHex(12) + "/");
-    var displayname = edit ? collection.displayname : "";
-    var description = edit ? collection.description : "";
-    var type = edit ? collection.type : CollectionType.CALENDAR_JOURNAL_TASKS;
-    var color = edit && collection.color ? collection.color : "#" + randHex(6);
+    let href = edit ? collection.href : collection.href + random_uuid() + "/";
+    let displayname = edit ? collection.displayname : "";
+    let description = edit ? collection.description : "";
+    let type = edit ? collection.type : CollectionType.CALENDAR_JOURNAL_TASKS;
+    let color = edit && collection.color ? collection.color : "#" + random_hex(6);
 
     function remove_invalid_types() {
         if (!edit) {
             return;
         }
-        /** @type {HTMLOptionsCollection} */ var options = type_form.options;
+        /** @type {HTMLOptionsCollection} */ let options = type_form.options;
         // remove all options that are not supersets
-        var i;
-        for (i = options.length - 1; i >= 0; i--) {
+        for (let i = options.length - 1; i >= 0; i--) {
             if (!CollectionType.is_subset(type, options[i].value)) {
                 options.remove(i);
             }
@@ -916,9 +1038,9 @@ function CreateEditCollectionScene(user, password, collection) {
     function onsubmit() {
         try {
             read_form();
-            var sane_color = color.trim();
+            let sane_color = color.trim();
             if (sane_color) {
-                var color_match = COLOR_RE.exec(sane_color);
+                let color_match = COLOR_RE.exec(sane_color);
                 if (!color_match) {
                     error = "Invalid color";
                     fill_form();
@@ -926,10 +1048,10 @@ function CreateEditCollectionScene(user, password, collection) {
                 }
                 sane_color = color_match[1];
             }
-            var loading_scene = new LoadingScene();
+            let loading_scene = new LoadingScene();
             push_scene(loading_scene);
-            var collection = new Collection(href, type, displayname, description, sane_color);
-            var callback = function(error1) {
+            let collection = new Collection(href, type, displayname, description, sane_color);
+            let callback = function(error1) {
                 if (scene_index === null) {
                     return;
                 }
@@ -969,7 +1091,7 @@ function CreateEditCollectionScene(user, password, collection) {
         type_form = type_form.cloneNode(true);
         saved_type_form.parentNode.replaceChild(type_form, saved_type_form);
         remove_invalid_types();
-        html_scene.style.display = "block";
+        html_scene.classList.remove("hidden");
         if (edit) {
             title_form.textContent = collection.displayname || collection.href;
         }
@@ -979,7 +1101,7 @@ function CreateEditCollectionScene(user, password, collection) {
     };
     this.hide = function() {
         read_form();
-        html_scene.style.display = "none";
+        html_scene.classList.add("hidden");
         // restore type_form
         type_form.parentNode.replaceChild(saved_type_form, type_form);
         type_form = saved_type_form;
@@ -997,6 +1119,8 @@ function CreateEditCollectionScene(user, password, collection) {
 }
 
 function main() {
+    // Hide startup loading message
+    document.getElementById("loadingscene").classList.add("hidden");
     push_scene(new LoginScene(), false);
 }
 

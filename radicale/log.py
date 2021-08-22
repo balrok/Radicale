@@ -1,5 +1,6 @@
 # This file is part of Radicale Server - Calendar Server
 # Copyright © 2011-2017 Guillaume Ayoub
+# Copyright © 2017-2019 Unrud <unrud@outlook.com>
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,26 +16,26 @@
 # along with Radicale.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-Radicale logging module.
+Functions to set up Python's logging facility for Radicale's WSGI application.
 
-Manage logging from a configuration file. For more information, see:
-http://docs.python.org/library/logging.config.html
+Log messages are sent to the first available target of:
+
+  - Error stream specified by the WSGI server in "wsgi.errors"
+  - ``sys.stderr``
 
 """
 
+import contextlib
 import logging
-import logging.config
-import signal
+import os
 import sys
+import threading
 
+LOGGER_NAME = "radicale"
+LOGGER_FORMAT = "[%(asctime)s] [%(ident)s] [%(levelname)s] %(message)s"
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S %z"
 
-def configure_from_file(logger, filename, debug):
-    logging.config.fileConfig(filename, disable_existing_loggers=False)
-    if debug:
-        logger.setLevel(logging.DEBUG)
-        for handler in logger.handlers:
-            handler.setLevel(logging.DEBUG)
-    return logger
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class RemoveTracebackFilter(logging.Filter):
@@ -43,33 +44,82 @@ class RemoveTracebackFilter(logging.Filter):
         return True
 
 
-def start(name="radicale", filename=None, debug=False):
-    """Start the logging according to the configuration."""
-    logger = logging.getLogger(name)
-    if debug:
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.addFilter(RemoveTracebackFilter())
-    if filename:
-        # Configuration taken from file
+REMOVE_TRACEBACK_FILTER = RemoveTracebackFilter()
+
+
+class IdentLogRecordFactory:
+    """LogRecordFactory that adds ``ident`` attribute."""
+
+    def __init__(self, upstream_factory):
+        self.upstream_factory = upstream_factory
+
+    def __call__(self, *args, **kwargs):
+        record = self.upstream_factory(*args, **kwargs)
+        ident = "%d" % os.getpid()
+        main_thread = threading.main_thread()
+        current_thread = threading.current_thread()
+        if current_thread.name and main_thread != current_thread:
+            ident += "/%s" % current_thread.name
+        record.ident = ident
+        return record
+
+
+class ThreadedStreamHandler(logging.Handler):
+    """Sends logging output to the stream registered for the current thread or
+       ``sys.stderr`` when no stream was registered."""
+
+    terminator = "\n"
+
+    def __init__(self):
+        super().__init__()
+        self._streams = {}
+
+    def emit(self, record):
         try:
-            configure_from_file(logger, filename, debug)
-        except Exception as e:
-            raise RuntimeError("Failed to load logging configuration file %r: "
-                               "%s" % (filename, e)) from e
-        # Reload config on SIGHUP (UNIX only)
-        if hasattr(signal, "SIGHUP"):
-            def handler(signum, frame):
-                try:
-                    configure_from_file(logger, filename, debug)
-                except Exception as e:
-                    logger.error("Failed to reload logging configuration file "
-                                 "%r: %s", filename, e, exc_info=True)
-            signal.signal(signal.SIGHUP, handler)
+            stream = self._streams.get(threading.get_ident(), sys.stderr)
+            msg = self.format(record)
+            stream.write(msg)
+            stream.write(self.terminator)
+            if hasattr(stream, "flush"):
+                stream.flush()
+        except Exception:
+            self.handleError(record)
+
+    @contextlib.contextmanager
+    def register_stream(self, stream):
+        """Register stream for logging output of the current thread."""
+        key = threading.get_ident()
+        self._streams[key] = stream
+        try:
+            yield
+        finally:
+            del self._streams[key]
+
+
+@contextlib.contextmanager
+def register_stream(stream):
+    """Register stream for logging output of the current thread."""
+    yield
+
+
+def setup():
+    """Set global logging up."""
+    global register_stream
+    handler = ThreadedStreamHandler()
+    logging.basicConfig(format=LOGGER_FORMAT, datefmt=DATE_FORMAT,
+                        handlers=[handler])
+    register_stream = handler.register_stream
+    log_record_factory = IdentLogRecordFactory(logging.getLogRecordFactory())
+    logging.setLogRecordFactory(log_record_factory)
+    set_level(logging.WARNING)
+
+
+def set_level(level):
+    """Set logging level for global logger."""
+    if isinstance(level, str):
+        level = getattr(logging, level.upper())
+    logger.setLevel(level)
+    if level == logging.DEBUG:
+        logger.removeFilter(REMOVE_TRACEBACK_FILTER)
     else:
-        # Default configuration, standard output
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(
-            logging.Formatter("[%(thread)x] %(levelname)s: %(message)s"))
-        logger.addHandler(handler)
-    return logger
+        logger.addFilter(REMOVE_TRACEBACK_FILTER)
